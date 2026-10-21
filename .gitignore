@@ -1,0 +1,14 @@
+# Local credentials, virtual environments, and generated Python files stay private.
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+.vscode/
+.idea/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.log
+*.pem
+*.key

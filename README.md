@@ -4,13 +4,10 @@ An inbound phone assistant with an explicit audio bridge, a delegated reasoning
 model, hosted web search, and one **fictional** headline function. Python makes
 the protocol easy to annotate; the architecture does not depend on the framework.
 
-Read [the walkthrough](docs/WALKTHROUGH.md) alongside the source. Every application
-module and function has a docstring, and comments explain the decisions at each
-protocol boundary. [The source notes](docs/SOURCES.md) link the verified API docs.
-
-Start with the four diagrams below to understand the project without watching the
-video, then follow the setup and testing steps. For a deeper code explanation,
-continue with [the walkthrough](docs/WALKTHROUGH.md).
+The diagrams below explain the component responsibilities and call flow. Follow
+the setup and testing steps to run the project. [The code walkthrough](docs/WALKTHROUGH.md)
+covers the implementation in detail, and [the source notes](docs/SOURCES.md) list
+the API references and verification scope.
 
 ## How it works
 
@@ -114,14 +111,14 @@ require the real-call checks in Step 4 below.
 
 ## Step 1 — Learn the files and configuration
 
-| File | What to study |
+| File | Purpose |
 | --- | --- |
 | `config.py` | Reading `.env`, separate model settings, and the public origin. |
 | `demo_tools.py` | Prompts, JSON Schema, session configuration, and the fake tool. |
 | `app.py` | HTTP webhook, TwiML, signatures, and the media WebSocket route. |
 | `bridge.py` | Per-call state, concurrent audio readers, function results, cleanup. |
 | `tests/test_demo.py` | The real bridge running against fake provider sockets. |
-| `docs/WALKTHROUGH.md` | A teaching sequence from first request to final cleanup. |
+| `docs/WALKTHROUGH.md` | Call lifecycle and implementation details. |
 
 Use Python **3.11 or later**. The local verification used Python 3.14 on Windows.
 Clone the repository, then create a local environment in PowerShell:
@@ -146,7 +143,7 @@ The repository excludes `.env`, virtual environments, and local editor settings.
 
 | Setting | Meaning / default |
 | --- | --- |
-| `OPENAI_API_KEY` | Existing key; used only on the server. |
+| `OPENAI_API_KEY` | OpenAI API key; used only on the server. |
 | `TWILIO_AUTH_TOKEN` | Token for the account owning the incoming number; validates requests. |
 | `PUBLIC_BASE_URL` | Your public HTTPS origin, for example `https://example.ngrok-free.app`. |
 | `LIVE_MODEL` | Voice model; defaults to `gpt-live-1`. |
@@ -157,10 +154,10 @@ The repository excludes `.env`, virtual environments, and local editor settings.
 | `STARTUP_TIMEOUT_SECONDS` | Defaults to `15`. |
 | `CLOSE_TIMEOUT_SECONDS` | Defaults to `5`; bounds graceful finalization. |
 
-An existing generic `OPENAI_MODEL` is deliberately unused. The voice and reasoning
-models occupy different fields and require compatible APIs. Existing
-`TWILIO_ACCOUNT_SID` and `TWILIO_PHONE_NUMBER` can remain in `.env`; this demo does
-not use the Twilio REST API to place calls or update the number.
+`OPENAI_MODEL` is unused. Configure the voice and reasoning models separately with
+`LIVE_MODEL` and `DELEGATED_MODEL`. `TWILIO_ACCOUNT_SID` and `TWILIO_PHONE_NUMBER`
+are also unused: the application receives inbound calls through the configured
+webhook and does not use the Twilio REST API to place calls or update the number.
 
 ## Step 2 — Run the offline checks
 
@@ -172,10 +169,6 @@ The tests inject fake credentials and fake sockets. They do not load your `.env`
 call providers, create a tunnel, or spend API credits. They check signed TwiML,
 unauthorized-request rejection, audio envelope translation, delayed-tool
 concurrency, duplicate-call suppression, startup timeout, and cleanup.
-
-On a restricted Windows agent sandbox, Python's asyncio loop can be blocked while
-creating its internal loopback socket. Run the same checks in a regular local
-terminal if the test runner stalls before executing the first test.
 
 ## Step 3 — Start the local server
 
@@ -194,13 +187,12 @@ liveness check only. It does not verify credentials, model access, or phone audi
 Starting the server alone opens no OpenAI session. Stop it with **Ctrl+C**.
 
 The application uses an app factory (`--factory`) so imports have no credential
-or network side effects. Reloading is optional during editing; a reload will
-disconnect active calls, so leave it off during a demonstration.
+or network side effects. Reloading during editing disconnects active calls.
 
-## Step 4 — Connect a real phone call when ready
+## Step 4 — Connect an inbound phone call
 
-This step exposes the local app and uses paid Twilio/OpenAI services. It has not
-been performed automatically. No phone-number configuration was changed.
+This step exposes the local app through an HTTPS tunnel and uses paid
+Twilio/OpenAI services.
 
 1. Start an HTTPS tunnel to port 5050, for example with an installed ngrok client:
 
@@ -228,9 +220,8 @@ been performed automatically. No phone-number configuration was changed.
    https://your-actual-tunnel.ngrok-free.app/incoming-call
    ```
 
-5. Call the number. Wait for the AI greeting, then try the checks below. The key's
-   project must have access to both configured models; local presence of a key
-   does not establish that access. Trial-account restrictions may also apply.
+5. Call the number. Wait for the AI greeting, then try the checks below. Your
+   OpenAI API project must have access to both configured models.
 
 | Try saying | What it exercises | Evidence to look for |
 | --- | --- | --- |
@@ -243,7 +234,7 @@ been performed automatically. No phone-number configuration was changed.
 The greeting requests specific wording from the model; verify what was actually
 spoken. This implementation does not guarantee word-for-word disclosure playback.
 
-## Step 5 — Understand the demo's boundary before extending it
+## Step 5 — Review capabilities and limitations
 
 - The headline tool is deterministic **fictional data**, with no news API or real
   business integration. Its delay models I/O; it does not perform business work.
@@ -257,9 +248,9 @@ spoken. This implementation does not guarantee word-for-word disclosure playback
   Those snapshots are **not** a complete Twilio/OpenAI cost report.
 - Signatures are validated on both entry points. Rate limiting, durable action
   idempotency, spend limits, human transfer, and production recovery are outside
-  this teaching demo. Canceling a local task would not undo a future external write.
+  this example. Canceling a local task would not undo a future external write.
 
-Keep `.env` out of screen recordings and shared project archives. A signed media
+Keep `.env` out of version control and shared project archives. A signed media
 connection can open a billable Live session; keep the public tunnel limited to
 your intentional testing period.
 
@@ -273,8 +264,3 @@ your intentional testing period.
 | `OpenAI session error code=...` | Check the named error and configured model/tool access. Raw error bodies are intentionally not logged. |
 | Headline described as real news | Review the prompts and actual spoken result; it must be identified as fictional. |
 | Hangup logs incomplete finalization | Network failure or close timeout; final usage is unconfirmed. |
-
-For a learner video, follow Steps 1–4 and explain each protocol boundary with the
-walkthrough. For a potential-client demo, introduce one concrete workflow next
-(such as a read-only availability lookup) and validate that workflow before
-adding actions that modify client systems.

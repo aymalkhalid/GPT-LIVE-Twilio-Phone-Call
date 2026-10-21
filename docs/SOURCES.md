@@ -1,7 +1,7 @@
 # Sources and verification boundaries
 
-Documentation checked on **2026-10-18**. Model availability and account permissions
-are not established by reading documentation or finding a local key.
+API references last reviewed on **2026-10-18**. Access to the configured models
+depends on your OpenAI API project.
 
 ## Implementation references
 
@@ -35,17 +35,17 @@ are not established by reading documentation or finding a local key.
 
 This is an independently annotated Python implementation of the tutorial's
 architecture. The fictional tool is deterministic and explicitly labeled; it
-does not return live headlines. The model defaults retain the tutorial's
-`gpt-live-1` and `gpt-5.6-terra`; they are not a claim that either is the newest
-choice or that the local account has access.
+does not return live headlines. The model defaults are `gpt-live-1` and
+`gpt-5.6-terra`, matching the linked tutorial. Configure `LIVE_MODEL` and
+`DELEGATED_MODEL` with models available to your OpenAI API project.
 
 Official OpenAI documentation recommends WebRTC for direct Live audio
 connections, including servers; WebSockets are also supported. This demo uses
 WebSockets to match Twilio Media Streams and keep both message boundaries visible.
 
-Request authentication, bounded startup/finalization, a separate tool task, and
-offline protocol tests make the teaching example more inspectable. They do not
-turn it into a finished production receptionist.
+The implementation validates Twilio requests, bounds startup/finalization, and
+executes local functions asynchronously. Offline tests cover event routing and
+cleanup.
 
 ## What local verification establishes
 
@@ -68,8 +68,6 @@ real handshake signature, network latency, interruptions, and final usage delive
 | Actual HTTP liveness | `GET /` returned HTTP 200 with `status: ok`; the temporary server was then shut down. |
 | Python compilation | Application modules and tests compiled successfully. |
 | Dependency consistency | `pip check`: no broken requirements. Tested versions are pinned in `requirements-lock.txt`. |
-| Local credential presence | The app's dotenv loader found nonempty OpenAI key and Twilio Auth Token values; no values were printed. |
-| Public configuration | `PUBLIC_BASE_URL` was absent; no tunnel or number configuration was created. |
 | Real provider verification | Not performed: no OpenAI sessions, hosted searches, or Twilio phone calls. |
 
 The installed Starlette TestClient emitted a deprecation warning about its HTTPX

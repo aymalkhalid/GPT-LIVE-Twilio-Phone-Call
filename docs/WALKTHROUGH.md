@@ -1,10 +1,9 @@
-# Teach the demo one boundary at a time
+# Code walkthrough: inbound call lifecycle
 
-The goal is to explain what crosses each connection, who owns each operation,
-and why the program remains responsive while tools run. Read the functions in
-the order below. The numbered steps are teaching checkpoints, not deployments.
+This guide follows configuration, call setup, audio forwarding, function calls,
+and cleanup through the Python implementation.
 
-## 1. Separate configuration from per-call state
+## 1. Configuration and per-call state
 
 Start at `Settings` in `config.py`.
 
@@ -21,12 +20,10 @@ Start at `Settings` in `config.py`.
   up the call; WSS carries the continuing conversation.
 
 `LIVE_MODEL` is for audio. `DELEGATED_MODEL` is for reasoning/tool selection.
-The provided defaults preserve the linked Twilio example. Account access must
-be checked during a deliberately authorized live test.
+The provided defaults preserve the linked Twilio example. The configured models
+must be available to your API project.
 
-Checkpoint: explain why a process can answer `GET /` without opening any AI session.
-
-## 2. Explain instructions, tool descriptions, and executable code
+## 2. Instructions, tool descriptions, and executable code
 
 Read `demo_tools.py` next.
 
@@ -44,17 +41,15 @@ rejects unadvertised fields at the schema boundary, and local checks validate th
 actual received data too. Bad input returns a structured error to the backend.
 
 The headline lookup deliberately uses fixed local data and labels its result
-`fictional: true`. A deterministic selection avoids a changing result while
-teaching. `await asyncio.sleep(2)` represents waiting on I/O without blocking the
+`fictional: true`. A deterministic selection keeps repeated requests reproducible.
+`await asyncio.sleep(2)` represents waiting on I/O without blocking the
 event loop. It must not be replaced by `time.sleep(2)` inside an async reader.
 
 `web_search` is hosted by OpenAI. Our application advertises it but does not
 implement a Python function for it. Only application function calls need our
 local dispatcher.
 
-Checkpoint: explain why the schema alone cannot query a calendar or create a booking.
-
-## 3. Follow the incoming HTTP webhook
+## 3. Incoming HTTP webhook
 
 Read `create_app()` and `incoming_call()` in `app.py`.
 
@@ -70,9 +65,7 @@ Read `create_app()` and `incoming_call()` in `app.py`.
 Returning XML doesn't transport the call audio. It directs Twilio to establish
 the next connection. The POST returns while the WebSocket remains open.
 
-Checkpoint: point to the exact instruction that makes Twilio open the media stream.
-
-## 4. Establish one isolated bridge per caller
+## 4. One isolated bridge per caller
 
 Read `media_stream()` in `app.py`, then `CallBridge.__init__()` and
 `wait_for_twilio_start()` in `bridge.py`.
@@ -93,9 +86,7 @@ Read `media_stream()` in `app.py`, then `CallBridge.__init__()` and
 Only after valid stream metadata does `connect_live()` open the second socket.
 Its Authorization header stays on the server. Its User-Agent identifies the app.
 
-Checkpoint: draw the two persistent connections and label their separate IDs.
-
-## 5. Start Live once, then wait for acknowledgment
+## 5. Live session startup
 
 Read `session_start()` in `demo_tools.py`, and the beginning of `CallBridge.run()`.
 
@@ -118,9 +109,7 @@ The greeting uses `session.instructions.append` and `session.commentary.append`;
 `delegation_id: null` makes these application updates outside a delegated task.
 `response.create` has a different purpose: starting/continuing backend work.
 
-Checkpoint: explain why sending the greeting immediately when TCP connects is a race.
-
-## 6. Trace audio through both readers
+## 6. Audio forwarding through both readers
 
 Read `read_twilio()` and `read_openai()`.
 
@@ -146,13 +135,12 @@ The application changes the envelopes, not the audio content.
 loop a chance to run the other reader. `asyncio.wait(... FIRST_COMPLETED)` lets
 either side end the call. `send_lock` serializes writes sharing the OpenAI socket.
 
-GPT-Live manages continuous listening/speaking. This is its Live protocol; do not
-paste in Realtime VAD, response cancellation, or response-audio-done assumptions.
+GPT-Live manages continuous listening/speaking through the Live event protocol.
+This implementation does not use Realtime VAD, response cancellation, or
+response-audio-done events.
 Local tests prove message routing, not speech quality or interruption latency.
 
-Checkpoint: follow one fictional base64 string through all four message shapes.
-
-## 7. Follow a complete function round trip
+## 7. Function call and result
 
 Read `schedule_tool()` and `execute_tool()`.
 
@@ -171,14 +159,10 @@ An arguments-done fragment is not our dispatch trigger. A hosted web-search item
 is not a local function call. A completed backend response is not proof that the
 caller heard the result; playback is a separate responsibility.
 
-This demo disables parallel function calls. Supporting batches later requires
-collecting all pending outputs before continuing, plus response/delegation-level
-bookkeeping. The current per-call duplicate set is not durable idempotency for
-client-system writes after a process restart.
+This implementation disables parallel function calls. Its per-call duplicate set
+does not provide durable idempotency for external writes after a process restart.
 
-Checkpoint: locate the two sends needed after a local function completes.
-
-## 8. Finish the call without leaving work behind
+## 8. Call finalization and cleanup
 
 Read the `finally` block in `CallBridge.run()`.
 
@@ -191,23 +175,5 @@ Read the `finally` block in `CallBridge.run()`.
   Cumulative duration snapshots replace the previous value; they are not summed.
 - Finally, both socket contexts/route cleanup release their connections.
 
-We cancel a harmless local sleep at hangup. A future booking/payment request
-needs its own policy: canceling a Python task does not reverse an external action.
-Audio interruption and cancellation of business work are separate decisions.
-
-Checkpoint: distinguish `ready`, `closing`, and `closed` without using them interchangeably.
-
-## Teaching and client-demo progression
-
-Record the foundation lesson in this order: architecture, HTTP/TwiML, Live
-handshake, audio envelopes, slow tool, and cleanup. Show the offline concurrency
-test before the real phone test so viewers can see what each form of evidence proves.
-
-For the next demo, choose one concrete client outcome and build incrementally:
-
-1. Replace fictional data with a read-only business lookup, preserving the tool boundary.
-2. Validate the lookup against realistic requests and corrections during a call.
-3. Add one state-changing action with explicit confirmation and durable idempotency.
-4. Add human handoff, failure recovery, measured latency, and operating limits.
-5. Present the actual tested outcome and limitations in an Upwork portfolio demo
-   or YouTube walkthrough; avoid claiming capabilities the demo doesn't implement.
+The current function performs no external writes. Canceling its task stops the
+simulated delay; canceling a Python task would not undo an external API action.

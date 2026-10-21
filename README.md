@@ -1,4 +1,4 @@
-# GPT-Live Twilio Phone Call — Python inbound AI voice assistant
+# Inbound Only GPT-Live Twilio Call — Python AI voice assistant
 
 An inbound phone assistant with an explicit audio bridge, a delegated reasoning
 model, hosted web search, and one **fictional** headline function. Python makes
@@ -32,8 +32,8 @@ Use Python **3.11 or later**. The local verification used Python 3.14 on Windows
 Clone the repository, then create a local environment in PowerShell:
 
 ```powershell
-git clone https://github.com/aymalkhalid/GPT-LIVE-Twilio-Phone-Call.git
-cd GPT-LIVE-Twilio-Phone-Call
+git clone https://github.com/aymalkhalid/Inbound-Only-GPT-Live-Twilio-Call.git
+cd Inbound-Only-GPT-Live-Twilio-Call
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements-lock.txt
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }

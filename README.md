@@ -8,6 +8,12 @@ Read [the walkthrough](docs/WALKTHROUGH.md) alongside the source. Every applicat
 module and function has a docstring, and comments explain the decisions at each
 protocol boundary. [The source notes](docs/SOURCES.md) link the verified API docs.
 
+Start with the four diagrams below to understand the project without watching the
+video, then follow the setup and testing steps. For a deeper code explanation,
+continue with [the walkthrough](docs/WALKTHROUGH.md).
+
+## How it works
+
 ```mermaid
 flowchart LR
     Caller <-->|Phone call| Twilio
@@ -16,6 +22,97 @@ flowchart LR
     Live <-->|Managed delegation| Reasoning[Responses reasoning model]
     Application <-->|Function call and result| Tool[Fictional headline function]
 ```
+
+### 1. Understand who carries, speaks, reasons, and executes
+
+![Responsibilities: Twilio carries the call, GPT-Live speaks, the delegated backend reasons, and the application executes functions.](docs/images/01-responsibilities.png)
+
+> **Framework note:** the illustration labels the application as
+> `Node.js · Fastify · ws`. This repository implements that role with **Python,
+> FastAPI, and websockets**. The responsibilities and connection boundaries are
+> the same.
+
+| Component | Responsibility in this project |
+| --- | --- |
+| **Twilio — carry** | Connect the phone caller and transport audio through Media Streams. |
+| **GPT-Live — speak** | Handle the voice interaction and delegate requests needing reasoning or tools. |
+| **Delegated Responses model — reason** | Handle delegated work, including choosing the fictional function or optional hosted web search. |
+| **Your application — execute** | Validate requests, bridge audio, run the local function, return its result, and clean up each call. |
+
+The **Call → Stream → Session → Tasks** labels describe related pieces of one
+conversation: Twilio's call and stream IDs, the OpenAI voice session, and local
+asynchronous tasks. Each caller gets a separate `CallBridge` in
+[bridge.py](bridge.py). OpenAI manages the delegated reasoning connection; the
+application opens the voice connection and handles its events.
+
+### 2. Set up the call with HTTP and TwiML
+
+![Call setup: Twilio sends an HTTP webhook, the application returns TwiML, and Twilio starts a continuing media stream.](docs/images/02-call-setup.png)
+
+1. Someone calls your Twilio number. Twilio sends an HTTP
+   `POST /incoming-call` to the application.
+2. [app.py](app.py) validates the Twilio signature and returns **TwiML**, XML
+   containing `<Connect><Stream url="wss://…/media-stream" /></Connect>`.
+3. Twilio follows those instructions and opens a **WebSocket to the application's
+   `/media-stream` endpoint**. The application validates that request before
+   accepting the connection.
+
+The HTTP response provides instructions; the continuing WebSocket carries audio
+in both directions. In the illustration, “Connect → Stream” represents the TwiML
+instruction: **Twilio initiates this media connection to your app**. Your app
+separately opens the connection to GPT-Live in the next step.
+
+### 3. Bridge audio through two WebSockets
+
+![Two bidirectional WebSockets connect Twilio to the application and the application to GPT-Live, carrying caller audio and AI speech in opposite directions.](docs/images/03-audio-bridge.png)
+
+The two connections are **Twilio ↔ application** and **application ↔ GPT-Live**.
+They carry caller audio toward the model and generated speech back toward the
+caller. The app translates the event envelopes at each boundary:
+
+| Direction | Audio field |
+| --- | --- |
+| Twilio → application | `event: media` with `media.payload` |
+| Application → GPT-Live | `type: session.input_audio.append` with `audio` |
+| GPT-Live → application | `type: session.output_audio.delta` with `delta` |
+| Application → Twilio | `event: media` with `streamSid` and `media.payload` |
+
+Both sides use **mono G.711 μ-law (PCMU) at 8 kHz**, so this bridge preserves the
+base64 audio payload while changing its JSON envelope. `read_twilio()` and
+`read_openai()` in [bridge.py](bridge.py) run concurrently. Local function work
+runs as a separate task so its simulated delay does not block audio forwarding.
+
+### 4. Follow the sequence in the Python code
+
+![Successful call sequence across Twilio, app.py routes, CallBridge, and OpenAI: webhook, TwiML, media stream, session startup, and audio forwarding.](docs/images/04-call-sequence.png)
+
+Read this diagram **from top to bottom**:
+
+1. **Route and bridge:** after the signed webhook and media connection,
+   `media_stream()` creates and runs one `CallBridge` for that caller.
+2. **Stream metadata:** `wait_for_twilio_start()` reads Twilio's `start` event,
+   checks the codec, and records the call and stream IDs.
+3. **Voice session:** the bridge connects to OpenAI and sends `session.start`.
+   After `session.started`, it requests the greeting and forwards caller audio.
+   Audio received before readiness is discarded in this demo.
+4. **Conversation:** the two readers forward caller audio and AI speech for the
+   duration of the connection.
+
+The sequence image focuses on startup and audio. Two more paths complete the
+implementation:
+
+- **Function result:** a completed function-call item arrives inside
+  `response.event`. `execute_tool()` runs the fictional headline function, sends
+  `response.item.create` with its output, then sends `response.create` to continue
+  the delegated work. Hosted web search is executed by OpenAI.
+- **Hangup and cleanup:** the bridge cancels caller-input and local tool tasks.
+  When the voice session is ready and its receiver is still active, it requests
+  `session.close`, waits within a timeout for `session.closed`, and releases the
+  transports. A disconnected socket alone does not confirm final usage.
+
+These diagrams explain the implementation. The offline tests check event routing
+and cleanup; actual phone audio, model access, and interruption behavior still
+require the real-call checks in Step 4 below.
 
 ## Step 1 — Learn the files and configuration
 

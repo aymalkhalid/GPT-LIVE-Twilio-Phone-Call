@@ -27,10 +27,8 @@ flowchart LR
 
 ![Responsibilities: Twilio carries the call, GPT-Live speaks, the delegated backend reasons, and the application executes functions.](docs/images/01-responsibilities.png)
 
-> **Framework note:** the illustration labels the application as
-> `Node.js · Fastify · ws`. This repository implements that role with **Python,
-> FastAPI, and websockets**. The responsibilities and connection boundaries are
-> the same.
+> **Implementation:** the illustration shows alternative application stacks.
+> This repository uses **Python, FastAPI, and websockets**.
 
 | Component | Responsibility in this project |
 | --- | --- |
